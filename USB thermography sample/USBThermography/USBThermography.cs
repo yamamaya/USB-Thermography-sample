@@ -28,7 +28,7 @@ namespace OaktreeLab.IO {
             Normal,
             /// <summary>アンダーフロー(-50℃以下)</summary>
             Underflow,
-            /// <summary>オーバーフロー(+300℃以下)</summary>
+            /// <summary>オーバーフロー(+300/900℃以上)</summary>
             Overflow,
             /// <summary>変換処理でエラー発生(変換の結果が0ケルビン以下)</summary>
             Error
@@ -62,6 +62,30 @@ namespace OaktreeLab.IO {
             }
         }
 
+        /// <summary>
+        /// ファームウェアのバージョン
+        /// </summary>
+        public Version FirmVersion {
+            get;
+            private set;
+        }
+
+        /// <summary>
+        /// 測定可能な最高温度
+        /// </summary>
+        public double TempMax {
+            get;
+            private set;
+        }
+
+        /// <summary>
+        /// 測定可能な最低温度
+        /// </summary>
+        public double TempMin {
+            get;
+            private set;
+        }
+
         private HIDSimple device = null;
 
         /// <summary>
@@ -72,6 +96,27 @@ namespace OaktreeLab.IO {
             device = new HIDSimple();
             if ( !device.Open( 0x04d8, 0xfa87 ) ) {
                 throw new SystemException( "device not found" );
+            }
+            device.Send( 0xff );
+            byte[] res = device.Receive();
+            string s = "";
+            foreach ( byte b in res ) {
+                if ( b == 0 ) {
+                    break;
+                }
+                s += char.ConvertFromUtf32( b );
+            }
+            if ( s == "" ) {
+                FirmVersion = new Version( "1.0.0" );
+            } else {
+                FirmVersion = new Version( s );
+            }
+            if ( FirmVersion >= new Version( "1.2.0" ) ) {
+                TempMax = 900;
+                TempMin = -50;
+            } else {
+                TempMax = 300;
+                TempMin = -50;
             }
         }
 
