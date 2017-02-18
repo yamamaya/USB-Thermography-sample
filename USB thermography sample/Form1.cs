@@ -21,7 +21,10 @@ namespace USB_thermography_sample {
         private void Form1_Load( object sender, EventArgs e ) {
             try {
                 // USBサーモグラフィに接続する（接続できなかった場合は例外が発生）
-                device = new USBThermography();
+                // device = new USBThermography();  // デバイスを１個に限定する場合
+                string[] paths = USBThermography.GetDevicePathList(); // 複数のデバイスから先頭の１台を選択して接続
+                device = new USBThermography( paths[ 0 ] );
+
                 // リフレッシュレートを1Hzに設定
                 device.SetRefreshRate( USBThermography.RefreshRate._1Hz );
                 // 放射率を0.95に設定

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Text;
+using System.Collections.Generic;
 using System.Security;
 using System.Security.Permissions;
 using Microsoft.Win32.SafeHandles;
@@ -27,13 +28,14 @@ namespace OaktreeLab.USBDevice {
         private IntPtr hDev = IntPtr.Zero;
 
         /// <summary>
-        /// USB HIDデバイスをオープンする
+        /// 指定されたVID/PIDを持つUSB HIDデバイスを列挙するする
         /// </summary>
         /// <param name="vid">デバイスのVID</param>
         /// <param name="pid">デバイスのPID</param>
-        /// <returns>成功した場合true、存在しなかった場合false</returns>
-        /// <exception cref="InvalidOperationException">デバイスをオープンできなかった場合</exception>
-        public bool Open( uint vid, uint pid ) {
+        /// <returns>デバイスのパスの配列</returns>
+        public static string[] EnumerateDevices( uint vid, uint pid ) {
+            List<string> PathList = new List<string>();
+
             string path = string.Format( @"\\?\hid#vid_{0,0:x4}&pid_{1,0:x4}", vid, pid );
 
             Guid guid = new Guid();
@@ -62,20 +64,60 @@ namespace OaktreeLab.USBDevice {
                 Marshal.FreeHGlobal( buffer );
 
                 if ( devicePath.IndexOf( path ) == 0 ) {
-                    hDev = Native.CreateFile(
-                        devicePath,
-                        Native.GENERIC_READ | Native.GENERIC_WRITE,
-                        0,
-                        IntPtr.Zero,
-                        Native.OPEN_EXISTING,
-                        0,
-                        IntPtr.Zero
-                    );
-                    break;
+                    PathList.Add( devicePath );
                 }
             }
 
             Native.SetupDiDestroyDeviceInfoList( hDeviceInfoSet );
+
+            return PathList.ToArray();
+        }
+
+        /// <summary>
+        /// USB HIDデバイスをオープンする。
+        /// 同一のVID/PIDのデバイスが複数存在する場合は先頭のデバイスをオープンする。
+        /// </summary>
+        /// <param name="vid">デバイスのVID</param>
+        /// <param name="pid">デバイスのPID</param>
+        /// <returns>成功した場合true、存在しなかった場合false</returns>
+        /// <exception cref="InvalidOperationException">デバイスをオープンできなかった場合</exception>
+        public bool Open( uint vid, uint pid ) {
+            return Open( vid, pid, 0 );
+        }
+
+        /// <summary>
+        /// USB HIDデバイスをオープンする。
+        /// </summary>
+        /// <param name="vid">デバイスのVID</param>
+        /// <param name="pid">デバイスのPID</param>
+        /// <param name="index">デバイスの序数</param>
+        /// <returns>成功した場合true、存在しなかった場合false</returns>
+        /// <exception cref="InvalidOperationException">デバイスをオープンできなかった場合</exception>
+        public bool Open( uint vid, uint pid, int index ) {
+            string[] devicePaths = EnumerateDevices( vid, pid );
+            if ( devicePaths.Length <= index ) {
+                return false;
+            }
+
+            return Open( devicePaths[ index ] );
+        }
+
+        /// <summary>
+        /// USB HIDデバイスをオープンする。
+        /// </summary>
+        /// <param name="path">デバイスのパス</param>
+        /// <returns>成功した場合true、存在しなかった場合false</returns>
+        /// <exception cref="InvalidOperationException">デバイスをオープンできなかった場合</exception>
+        public bool Open( string path ) {
+            hDev = Native.CreateFile(
+                path,
+                Native.GENERIC_READ | Native.GENERIC_WRITE,
+                0,
+                IntPtr.Zero,
+                Native.OPEN_EXISTING,
+                0,
+                IntPtr.Zero
+            );
 
             if ( hDev.ToInt32() <= -1 ) {
                 hDev = IntPtr.Zero;

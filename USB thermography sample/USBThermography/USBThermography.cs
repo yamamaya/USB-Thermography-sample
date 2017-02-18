@@ -87,14 +87,42 @@ namespace OaktreeLab.IO {
         }
 
         private HIDSimple device = null;
+        private byte[] eeprom;
+        private const int VID = 0x04d8;
+        private const int PID = 0xfa87;
 
         /// <summary>
         /// インスタンスを作成しUSBサーモグラフィに接続する。
         /// </summary>
         /// <exception cref="SystemException">USBサーモグラフィに接続できない場合</exception>
         public USBThermography() {
+            string[] paths = GetDevicePathList();
+            if ( paths.Length == 0 ) {
+                throw new SystemException( "device not found" );
+            }
+            Open( paths[ 0 ] );
+        }
+
+        /// <summary>
+        /// インスタンスを作成しUSBサーモグラフィに接続する。
+        /// </summary>
+        /// <param name="path">デバイスのパス</param>
+        /// <exception cref="SystemException">USBサーモグラフィに接続できない場合</exception>
+        public USBThermography( string path ) {
+            Open( path );
+        }
+
+        /// <summary>
+        /// 接続されているUSBサーモグラフィのパスの一覧を取得する。
+        /// </summary>
+        /// <returns></returns>
+        public static string[] GetDevicePathList() {
+            return HIDSimple.EnumerateDevices( VID, PID );
+        }
+
+        private void Open( string path ) {
             device = new HIDSimple();
-            if ( !device.Open( 0x04d8, 0xfa87 ) ) {
+            if ( !device.Open( path ) ) {
                 throw new SystemException( "device not found" );
             }
             device.Send( 0xff );
@@ -117,6 +145,14 @@ namespace OaktreeLab.IO {
             } else {
                 TempMax = 300;
                 TempMin = -50;
+            }
+
+            eeprom = new byte[ 256 ];
+            for ( int page = 0 ; page < 4 ; page++ ) {
+                // read eepromコマンド（0～3ページ）
+                device.Send( 0x80, (byte)page );
+                res = device.Receive();
+                Array.Copy( res, 0, eeprom, page * 64, 64 );
             }
         }
 
@@ -268,18 +304,26 @@ namespace OaktreeLab.IO {
         /// IRアレイセンサーのEEPROMの内容を読み取る。
         /// </summary>
         /// <returns>EEPROMの内容</returns>
-        /// <exception cref="InvalidOperationException">デバイスとの通信エラー</exception>
         public byte[] ReadEEPROM() {
-            byte[] eeprom = new byte[256];
-
-            for ( int page = 0 ; page < 4 ; page++ ) {
-                // read eepromコマンド（0～3ページ）
-                device.Send( 0x80, (byte)page );
-                byte[] res = device.Receive();
-                Array.Copy( res, 0, eeprom, page * 64, 64 );
-            }
-
             return eeprom;
+        }
+
+        /// <summary>
+        /// デバイスの識別子を取得する。
+        /// 識別子は32文字の文字列で、デバイス固有と考えて問題ない。
+        /// </summary>
+        public string DeviceID {
+            get {
+                byte[] hash;
+                using ( System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create() ) {
+                    hash = md5.ComputeHash( eeprom );
+                }
+                string result = "";
+                foreach ( byte b in hash ) {
+                    result += b.ToString( "X2" );
+                }
+                return result;
+            }
         }
     }
 }
